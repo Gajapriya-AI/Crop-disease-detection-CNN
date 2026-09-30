@@ -1,0 +1,10 @@
+# Generated PlantVillage subset: prepare locally; never commit images to GitHub.
+/dataset/
+
+# Temporary dataset build/replace directories created by the setup script.
+/.dataset.staging-*/
+/.dataset.backup-*/
+
+# Python cache files.
+__pycache__/
+*.py[cod]
