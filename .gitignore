@@ -8,3 +8,30 @@
 # Python cache files.
 __pycache__/
 *.py[cod]
+
+# Trained models are large binaries: train them locally, do not commit them.
+/models/*
+!/models/.gitkeep
+*.keras
+*.h5
+*.hdf5
+/saved_model/
+
+# Generated reports (metrics, confusion matrices, training curves).
+/reports/*
+!/reports/.gitkeep
+
+# Virtual environments (Windows: .venv, venv; macOS/Linux too).
+.venv/
+venv/
+env/
+
+# Jupyter notebook checkpoints.
+.ipynb_checkpoints/
+
+# Streamlit local settings/secrets.
+.streamlit/secrets.toml
+
+# OS / editor clutter.
+.DS_Store
+Thumbs.db
