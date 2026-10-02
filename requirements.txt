@@ -1,28 +1,7 @@
-# ---------------------------------------------------------------------------
-# Crop disease detection - Python dependencies
-#
-# Install everything with (from the project root):
-#     Windows (VS Code terminal):  py -m pip install -r requirements.txt
-#     macOS / Linux:               python3 -m pip install -r requirements.txt
-#
-# Note: the "tensorflow" package installs the CPU version by default, which
-# is enough for this project. Python 3.9 - 3.12 is recommended.
-# ---------------------------------------------------------------------------
-
-# Deep-learning framework (Keras is included in TensorFlow >= 2.16).
-tensorflow>=2.16,<3.0
-
-# Image loading and processing.
-pillow>=10.0.0
-
-# Numerical computing (also required by TensorFlow and scikit-learn).
-numpy>=1.24.0
-
-# Evaluation metrics (precision, recall, F1-score, confusion matrix).
+tensorflow==2.21.0
+numpy>=2.0.0
+Pillow>=11.0.0
+opencv-python-headless>=4.10.0
 scikit-learn>=1.3.0
-
-# Plots: training curves and confusion-matrix figures.
 matplotlib>=3.7.0
-
-# Web app for image upload + prediction (app.py).
 streamlit>=1.32.0
