@@ -1,203 +1,525 @@
-"""Streamlit web app: upload a tomato-leaf image and get a disease prediction.
-
-Run from the project root:
-
-    Windows (VS Code terminal):   py -m streamlit run app.py
-    macOS / Linux:                python3 -m streamlit run app.py
-
-The browser opens automatically at http://localhost:8501.  The app loads the
-best MobileNetV3 model (``models/mobilenet_v3_best.keras``) by default; the
-CNN baseline can be selected in the sidebar if it has been trained too.
-"""
-
 from __future__ import annotations
 
 import io
 import sys
 from pathlib import Path
 
-# Make "from src import ..." work no matter how Streamlit launches this file.
+import streamlit as st
+
+# Project root
 PROJECT_ROOT = Path(__file__).resolve().parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-import streamlit as st  # noqa: E402
-
-from src import config, inference  # noqa: E402
+from src import config, inference
 
 
-# ---------------------------------------------------------------------------
-# Page setup
-# ---------------------------------------------------------------------------
+# ============================================================
+# PAGE CONFIG
+# ============================================================
 
 st.set_page_config(
-    page_title="Tomato Leaf Disease Detection",
+    page_title="Tomato Leaf AI",
     page_icon="🍅",
-    layout="centered",
+    layout="wide",
+    initial_sidebar_state="expanded",
 )
 
-ALLOWED_UPLOAD_TYPES = ["jpg", "jpeg", "png", "bmp", "webp"]
+
+# ============================================================
+# CUSTOM CSS
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    /* Main background */
+    .stApp {
+        background: linear-gradient(
+            135deg,
+            #f8fff8 0%,
+            #ffffff 45%,
+            #fff7ed 100%
+        );
+    }
+
+    /* Main content width */
+    .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 1200px;
+    }
+
+    /* Hero */
+    .hero {
+        background: linear-gradient(
+            135deg,
+            #ff512f,
+            #f09819
+        );
+        padding: 38px;
+        border-radius: 24px;
+        text-align: center;
+        margin-bottom: 30px;
+        box-shadow: 0 10px 30px rgba(255, 81, 47, 0.20);
+    }
+
+    .hero h1 {
+        color: white;
+        font-size: 42px;
+        font-weight: 800;
+        margin: 0;
+    }
+
+    .hero p {
+        color: white;
+        font-size: 18px;
+        margin-top: 10px;
+    }
+
+    /* Cards */
+    .card {
+        background: white;
+        border-radius: 18px;
+        padding: 22px;
+        border: 1px solid #e5e7eb;
+        box-shadow: 0 5px 18px rgba(0, 0, 0, 0.07);
+        min-height: 130px;
+    }
+
+    .card-title {
+        color: #6b7280;
+        font-size: 14px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .card-value {
+        color: #172554;
+        font-size: 24px;
+        font-weight: 800;
+        margin-top: 10px;
+    }
+
+    /* Section headings */
+    .section-title {
+        color: #172554;
+        font-size: 26px;
+        font-weight: 800;
+        margin-top: 35px;
+        margin-bottom: 15px;
+    }
+
+    /* Prediction box */
+    .prediction-box {
+        background: #f0fdf4;
+        border: 2px solid #86efac;
+        border-radius: 18px;
+        padding: 25px;
+        margin-top: 20px;
+    }
+
+    .disease-box {
+        background: #fff7ed;
+        border: 2px solid #fdba74;
+        border-radius: 18px;
+        padding: 25px;
+        margin-top: 20px;
+    }
+
+    .prediction-title {
+        font-size: 28px;
+        font-weight: 800;
+        color: #172554;
+    }
+
+    .confidence {
+        font-size: 20px;
+        font-weight: 700;
+        color: #475569;
+    }
+
+    /* Footer */
+    .footer {
+        text-align: center;
+        color: #64748b;
+        padding: 30px 0 10px 0;
+        font-size: 14px;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 
-@st.cache_resource(show_spinner="Loading model, please wait ...")
-def get_predictor(model_path_str: str) -> inference.DiseasePredictor:
-    """Load a model once and reuse it for every prediction (cached)."""
-    return inference.DiseasePredictor(model_path_str)
+# ============================================================
+# MODEL
+# ============================================================
+
+@st.cache_resource(show_spinner="Loading AI model...")
+def get_predictor(model_path):
+    return inference.DiseasePredictor(str(model_path))
 
 
-def find_available_models() -> dict[str, Path]:
-    """Return {display name: path} for every trained model found in models/."""
-    available: dict[str, Path] = {}
-    if config.MOBILENET_MODEL_PATH.is_file():
-        available["MobileNetV3 (recommended)"] = config.MOBILENET_MODEL_PATH
-    if config.CNN_MODEL_PATH.is_file():
-        available["Custom CNN baseline"] = config.CNN_MODEL_PATH
-    # Any other .keras files the user may have saved in models/.
-    for path in sorted(config.MODELS_DIR.glob("*.keras")):
-        if path not in available.values():
-            available[path.stem] = path
-    return available
+def find_model():
+    """
+    Use the Custom CNN final model.
+    """
+
+    possible_models = [
+        config.MODELS_DIR / "crop_disease_best_model.keras",
+        config.MODELS_DIR / "cnn_best.keras",
+    ]
+
+    for model in possible_models:
+        if model.exists():
+            return model
+
+    # Fallback: find any keras model
+    keras_models = list(config.MODELS_DIR.glob("*.keras"))
+
+    if keras_models:
+        return keras_models[0]
+
+    return None
 
 
-# ---------------------------------------------------------------------------
-# Sidebar
-# ---------------------------------------------------------------------------
+# ============================================================
+# SIDEBAR
+# ============================================================
 
 with st.sidebar:
-    st.header("🍅 Settings")
 
-    available_models = find_available_models()
-    if available_models:
-        model_label = st.selectbox(
-            "Choose a trained model",
-            options=list(available_models),
-            index=0,
-            help="Train models with 'py src\\train_mobilenet.py' and 'py src\\train_cnn.py'.",
-        )
-        model_path = available_models[model_label]
-        st.caption(f"Model file: `{model_path.name}`")
+    st.header("🍅 Tomato Leaf AI")
+
+    st.markdown("---")
+
+    st.subheader("🤖 AI Model")
+
+    model_path = find_model()
+
+    if model_path:
+
+        st.success("Model loaded")
+
+        st.write("**Model:** Custom CNN")
+        st.write("**Input:** 224 × 224")
+        st.write("**Classes:** 5")
+
     else:
-        model_path = None
-        st.error(
-            "No trained model found in the `models/` folder.\n\n"
-            "Train one first from the project root:\n\n"
-            "`py src\\train_mobilenet.py`"
-        )
 
-    st.divider()
-    st.subheader("About this app")
-    st.markdown(
-        "This app detects diseases in **tomato leaves** using a MobileNetV3 "
-        "convolutional neural network trained on the PlantVillage dataset.\n\n"
-        "**Classes it knows:**"
-    )
+        st.error("No trained model found.")
+
+    st.markdown("---")
+
+    st.subheader("🌿 Disease Classes")
+
     for class_name in config.CLASSES:
-        st.markdown(f"- {config.display_label(class_name)}")
-    st.caption(
-        f"Images are resized to {config.IMG_SIZE}x{config.IMG_SIZE} pixels "
-        "before prediction. Upload a clear, close-up photo of a single leaf "
-        "for the best results."
+        st.write("•", config.display_label(class_name))
+
+    st.markdown("---")
+
+    st.info(
+        "Upload a clear tomato leaf image for prediction."
     )
 
-# ---------------------------------------------------------------------------
-# Main page
-# ---------------------------------------------------------------------------
 
-st.title("🍅 Tomato Leaf Disease Detection")
+# ============================================================
+# HERO
+# ============================================================
+
 st.markdown(
-    "Upload a photo of a tomato leaf and the model will predict whether it is "
-    "**healthy** or affected by one of **four diseases**, together with a "
-    "confidence percentage."
+    """
+    <div class="hero">
+        <h1>🍅 Tomato Leaf AI</h1>
+        <p>
+            AI-powered tomato leaf disease detection using Deep Learning
+        </p>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# ============================================================
+# MODEL OVERVIEW
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">🚀 AI Model Overview</div>',
+    unsafe_allow_html=True,
+)
+
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    st.markdown(
+        """
+        <div class="card">
+            <div class="card-title">Model</div>
+            <div class="card-value">Custom CNN</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col2:
+    st.markdown(
+        """
+        <div class="card">
+            <div class="card-title">Input Size</div>
+            <div class="card-value">224 × 224</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col3:
+    st.markdown(
+        """
+        <div class="card">
+            <div class="card-title">Classes</div>
+            <div class="card-value">5 Classes</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+with col4:
+    st.markdown(
+        """
+        <div class="card">
+            <div class="card-title">Dataset</div>
+            <div class="card-value">PlantVillage</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
+# ============================================================
+# UPLOAD
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">📷 Upload Tomato Leaf</div>',
+    unsafe_allow_html=True,
 )
 
 uploaded_file = st.file_uploader(
-    "Choose a leaf image (JPG, JPEG, PNG, BMP or WEBP)",
-    type=ALLOWED_UPLOAD_TYPES,
-    accept_multiple_files=False,
+    "Choose a tomato leaf image",
+    type=["jpg", "jpeg", "png", "bmp", "webp"],
 )
 
-if uploaded_file is None:
-    st.info("👆 No image uploaded yet. Select an image file to get started.")
-    st.stop()
+if uploaded_file is not None:
 
-# --- Show the uploaded image ------------------------------------------------
-left_column, right_column = st.columns([1, 1])
-with left_column:
-    st.image(uploaded_file, caption=f"Uploaded: {uploaded_file.name}")
+    left, right = st.columns([1, 1])
 
-with right_column:
-    st.subheader("Prediction")
+    # --------------------------------------------------------
+    # IMAGE
+    # --------------------------------------------------------
 
-    # --- Validate the file extension before doing any work -----------------
-    suffix = Path(uploaded_file.name).suffix.lower()
-    if suffix.lstrip(".") not in ALLOWED_UPLOAD_TYPES:
-        st.error(
-            f"Unsupported file type '{suffix}'. "
-            f"Please upload one of: {', '.join(ALLOWED_UPLOAD_TYPES)}."
+    with left:
+
+        st.subheader("🖼️ Uploaded Image")
+
+        st.image(
+            uploaded_file,
+            use_container_width=True,
         )
-        st.stop()
 
-    if model_path is None:
-        st.error(
-            "No trained model is available yet. See the sidebar for the "
-            "training command, then refresh this page."
+        st.caption(
+            f"File: {uploaded_file.name}"
         )
-        st.stop()
 
-    predict_clicked = st.button("🔎 Predict disease", type="primary")
+    # --------------------------------------------------------
+    # PREDICTION
+    # --------------------------------------------------------
 
-    if predict_clicked:
-        try:
-            predictor = get_predictor(str(model_path))
-            # Wrap the uploaded bytes in a file-like object for the predictor.
-            result = predictor.predict(
-                io.BytesIO(uploaded_file.getvalue()),
-                filename=uploaded_file.name,
+    with right:
+
+        st.subheader("🔍 AI Prediction")
+
+        if model_path is None:
+
+            st.error(
+                "Trained model not found in the models folder."
             )
-        except (FileNotFoundError, ValueError, ImportError) as error:
-            st.error(f"Prediction failed: {error}")
-            st.stop()
-        except Exception as error:  # noqa: BLE001 - show any unexpected problem
-            st.error(f"Unexpected error during prediction: {error}")
-            st.exception(error)
-            st.stop()
 
-        # --- Show the result ------------------------------------------------
-        confidence_percent = result["confidence_percent"]
-
-        if result["is_healthy"]:
-            st.success(f"✅ This leaf looks **Healthy**! ({confidence_percent:.1f}% confidence)")
         else:
-            st.warning(
-                f"⚠️ Disease detected: **{result['disease']}** "
-                f"({confidence_percent:.1f}% confidence)"
+
+            predict_clicked = st.button(
+                "🔎 Predict Disease",
+                type="primary",
+                use_container_width=True,
             )
 
-        st.metric(
-            label=f"Confidence for '{result['disease']}'",
-            value=f"{confidence_percent:.1f}%",
+            if predict_clicked:
+
+                with st.spinner(
+                    "AI is analyzing the tomato leaf..."
+                ):
+
+                    try:
+
+                        predictor = get_predictor(model_path)
+
+                        result = predictor.predict(
+                            io.BytesIO(
+                                uploaded_file.getvalue()
+                            ),
+                            filename=uploaded_file.name,
+                        )
+
+                        disease = result["disease"]
+                        confidence = result["confidence"]
+                        confidence_percent = result[
+                            "confidence_percent"
+                        ]
+
+                        # ------------------------------------------------
+                        # RESULT
+                        # ------------------------------------------------
+
+                        if result["is_healthy"]:
+
+                            st.success(
+                                f"🌿 Healthy Leaf\n\n"
+                                f"Confidence: {confidence_percent:.2f}%"
+                            )
+
+                        else:
+
+                            st.warning(
+                                f"⚠️ Disease Detected: {disease}\n\n"
+                                f"Confidence: {confidence_percent:.2f}%"
+                            )
+
+                        # Metrics
+
+                        m1, m2 = st.columns(2)
+
+                        with m1:
+
+                            st.metric(
+                                "Predicted Class",
+                                disease,
+                            )
+
+                        with m2:
+
+                            st.metric(
+                                "Confidence",
+                                f"{confidence_percent:.2f}%",
+                            )
+
+                        # Progress
+
+                        st.progress(
+                            min(
+                                max(
+                                    confidence,
+                                    0.0,
+                                ),
+                                1.0,
+                            )
+                        )
+
+                        # ------------------------------------------------
+                        # ALL PROBABILITIES
+                        # ------------------------------------------------
+
+                        st.markdown("### 📊 Class Probabilities")
+
+                        ranked = sorted(
+                            result["probabilities"].items(),
+                            key=lambda x: x[1],
+                            reverse=True,
+                        )
+
+                        for class_name, probability in ranked:
+
+                            label = config.disease_name(
+                                class_name
+                            )
+
+                            percentage = probability * 100
+
+                            st.write(
+                                f"**{label}** — "
+                                f"{percentage:.2f}%"
+                            )
+
+                            st.progress(
+                                min(
+                                    max(
+                                        probability,
+                                        0.0,
+                                    ),
+                                    1.0,
+                                )
+                            )
+
+                        # ------------------------------------------------
+                        # LOW CONFIDENCE
+                        # ------------------------------------------------
+
+                        if confidence_percent < 60:
+
+                            st.info(
+                                "💡 Low confidence prediction. "
+                                "Try a clear, well-lit close-up "
+                                "image of a single tomato leaf."
+                            )
+
+                    except Exception as error:
+
+                        st.error(
+                            f"Prediction failed: {error}"
+                        )
+
+
+# ============================================================
+# INFORMATION
+# ============================================================
+
+st.markdown(
+    '<div class="section-title">🌱 Supported Diseases</div>',
+    unsafe_allow_html=True,
+)
+
+disease_cols = st.columns(5)
+
+for index, class_name in enumerate(config.CLASSES):
+
+    with disease_cols[index]:
+
+        st.info(
+            config.display_label(class_name)
         )
-        st.progress(min(max(result["confidence"], 0.0), 1.0))
 
-        # Probabilities of every class, highest first.
-        with st.expander("Probabilities for all classes", expanded=True):
-            ranked = sorted(
-                result["probabilities"].items(), key=lambda item: item[1], reverse=True
-            )
-            for class_name, probability in ranked:
-                label = config.disease_name(class_name)
-                st.write(f"**{label}** - {probability * 100:.2f}%")
-                st.progress(min(max(probability, 0.0), 1.0))
 
-        if confidence_percent < 60.0:
-            st.info(
-                "ℹ️ The confidence is low. Try a sharper, well-lit close-up "
-                "photo of a single leaf."
-            )
+# ============================================================
+# FOOTER
+# ============================================================
 
-st.divider()
-st.caption(
-    "Built with TensorFlow/Keras + Streamlit. Dataset: PlantVillage "
-    "(5 tomato classes). For research/education - not a substitute for "
-    "expert agricultural advice."
+st.markdown(
+    """
+    <div class="footer">
+
+    🍅 <b>Tomato Leaf AI</b><br>
+
+    Built with TensorFlow / Keras + Streamlit<br>
+
+    Dataset: PlantVillage — 5 Tomato Leaf Classes<br>
+
+    <br>
+
+    For research and educational purposes only.
+
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
