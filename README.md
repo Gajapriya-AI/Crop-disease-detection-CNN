@@ -17,6 +17,12 @@ It also includes a **Streamlit web app** (`app.py`) for uploading a leaf image a
 
 All images are resized to **224 x 224** pixels and trained with **batch size 16** and **data augmentation** (random flip, rotation, zoom, translation and contrast).
 
+## 🌐 Live Application
+
+The trained CNN model is deployed as an interactive Streamlit web application.
+
+👉 [**Open Live Demo**](https://crop-disease-detection-cnn-o8gbsgdukbuh5tsbaxw8sq.streamlit.app/)
+
 ## Project structure
 
 ```text
